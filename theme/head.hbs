@@ -1,0 +1,174 @@
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const search = document.getElementById("searchbar");
+  
+  if (search) {
+    search.placeholder = "Търси в книгата...";
+  }
+});
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const observer = new MutationObserver(translateSearchResults);
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+   
+    function translateSearchResults() {
+        const el = document.querySelector("#mdbook-searchresults-header");
+        const engNoR = "No search results for";
+        const engOneR = "1 search result for";
+
+        if (el.textContent.startsWith(engNoR)) {
+            el.textContent = el.textContent.replace(
+                engNoR, "Няма намерени резултати за"
+            );
+        }
+
+        else if (el.textContent.startsWith(engOneR)) {
+            el.textContent = el.textContent.replace(
+                engOneR, "Намерен е един резултат за"
+            );
+        }
+
+        else if (/^\d+ search results/.test(el.textContent)) {
+            el.textContent = el.textContent.replace(
+                /^(\d+) search results for/,
+                "Намерени са $1 резултата за"
+            );
+        }
+    }
+});
+</script>
+
+<script>
+// Prefetch all pages
+document.addEventListener("DOMContentLoaded", async () => {
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const hostname = window.location.hostname;
+    const isIPv4 = ipv4Regex.test(hostname);
+
+    if (isIPv4) {
+        console.log(">>> ip4", hostname);
+        return;
+    }
+
+    const links = [...document.querySelectorAll("a")];
+
+    const pages = [...new Set(
+        links
+            .map(a => a.href)
+            .filter(url =>
+                url.startsWith(location.origin) &&
+                url.endsWith(".html")
+            )
+    )];
+
+    const prefetched = JSON.parse(
+        sessionStorage.getItem("prefetchedPages") || "[]"
+    );
+
+    const done = new Set(prefetched);
+
+    const missing = pages.filter(url => !done.has(url));
+
+    await Promise.all(
+        missing.map(async url => {
+            await fetch(url, {
+                credentials: "same-origin"
+            });
+            done.add(url);
+        })
+    );
+
+    sessionStorage.setItem(
+        "prefetchedPages",
+        JSON.stringify([...done])
+    );
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const title = document.querySelector('.menu-title');
+
+    if (title) {
+        const link = document.createElement('a');
+        link.href = path_to_root + 'intro.html';
+        link.textContent = title.textContent;
+
+        title.textContent = '';
+        title.appendChild(link);
+    }
+});
+</script>
+
+<script>
+(function () {
+    function patch() {
+        if (!window.elasticlunr || !window.elasticlunr.Index) {
+            setTimeout(patch, 50);
+            return;
+        }
+
+        const proto = window.elasticlunr.Index.prototype;
+        if (proto.__bgSearchPatched) return;
+
+        const originalSearch = proto.search;
+
+        proto.search = function (query, options) {
+            // Use normal mdBook/Elasticlunr search for non-Cyrillic queries.
+            if (!/[А-Яа-яЁё]/.test(query)) {
+                return originalSearch.call(this, query, options);
+            }
+
+            const docs = this.documentStore && this.documentStore.docs;
+            if (!docs) {
+                return originalSearch.call(this, query, options);
+            }
+
+            const terms = query
+                .toLocaleLowerCase('bg-BG')
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+
+            const fields = ['title', 'body', 'breadcrumbs'];
+            const results = [];
+
+            Object.keys(docs).forEach(function (id) {
+                const doc = docs[id];
+
+                const text = fields
+                    .map(function (field) {
+                        return doc[field] || '';
+                    })
+                    .join(' ')
+                    .toLocaleLowerCase('bg-BG');
+
+                // AND: every searched Bulgarian word must occur.
+                if (terms.every(function (term) {
+                    return text.indexOf(term) !== -1;
+                })) {
+                    results.push({
+                        ref: id,
+                        score: terms.reduce(function (score, term) {
+                            return score + (text.indexOf(term) !== -1 ? 1 : 0);
+                        }, 0),
+                        doc: doc
+                    });
+                }
+            });
+
+            return results;
+        };
+
+        proto.__bgSearchPatched = true;
+    }
+
+    patch();
+})();
+</script>
