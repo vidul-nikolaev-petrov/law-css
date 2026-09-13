@@ -49,8 +49,12 @@ details {
 }
 
 div.sub-1 {
-  font-size: 1.8rem;
-  color: #4D4C4C;
+    font-size: 1.8rem;
+    color: #4d4c4c;
+}
+
+div.sub-1 {
+  font-size: 1.45rem !important;
 }
 
 /* Optional: Apply these smaller sizes ONLY on mobile screens */
